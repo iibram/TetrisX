@@ -189,6 +189,8 @@ void TetrisX::updateGame()
 				move(Movement::DOWN);
 				trySolidize();
 
+				isRunning = !isBlocked;											// game over ?
+
 				if (autoDown == Configs::SPEEDS[level])
 					autoDown = 0;
 			}
@@ -379,12 +381,13 @@ void TetrisX::trySolidize()
 {
 	if (!moveInfo.canMove)
 	{
-		currID = 0;																	// key control and autoDown are implicitly "disabled"
-		hitGround = true;															// impact detected
-
+		isBlocked = true;
 		uint16_t bottomIdx = 1;														// to avoid division by zero (even though it is guaranteed to be populated)
+		uint8_t k = 0;																// index for the comparison with BLOCKS
+
 		for (B_Cell& b : currBlock)
 		{
+			isBlocked &= (b.idx == Configs::BLOCKS[currID - 1][k++].idx);			// comparing if currBlock hit a SOLID without a single move since spawn
 			board[b.idx].solid = true;												// currBlock is registered as SOLID in the board
 			bottomIdx = b.idx;														// since currBlock is sorted in ascending order => last B_cell.idx = max
 		}
@@ -395,6 +398,9 @@ void TetrisX::trySolidize()
 			bottomRow = bottomIdx;													// bottomRow is uint8_t, but indexing unfortunately requires values ​​> 255
 			complFSM = State::BOOM_1;												// the completion routine begins
 		}
+
+		currID = 0;																	// key control and autoDown are implicitly "disabled"
+		hitGround = true;															// impact detected
 	}
 }
 

@@ -206,6 +206,7 @@ private:
 	bool newBlock = true;						// control note: new block spawns
 	bool hitGround = false;						// control note: currBlock has hit a SOLID field vertically
 	bool actionPerformed = false;				// control note: an action was performed that requires an update of the game board
+	bool isBlocked = false;						// control note: the currBlock is immediately blocked upon appearance
 
 	bool DOWN = false;							// key control: current value of down key
 	bool PREV_L = false;						// key control: previous value of left key

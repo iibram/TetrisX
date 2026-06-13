@@ -22,7 +22,7 @@ namespace AsyncKey
 {
 	enum class Key
 	{
-		// Pfeiltasten & System
+		// arrow keys & system
 		UP,
 		DOWN,
 		LEFT,
@@ -32,7 +32,7 @@ namespace AsyncKey
 		SPACE,
 		TAB,
 
-		// WASD-Steuerung
+		// WASD controls
 		W,
 		A,
 		S,
