@@ -27,7 +27,7 @@ TetrisX solves this by treating software design with a hardware-near mindset:
 
 ### 📊 Compile-Time LUT-Driven Architecture
 To achieve instantaneous calculations, TetrisX moves the heavy lifting to compile-time using extensively configured Look-Up Tables (LUTs).
-* **O(1) Transformations:** Rotations for all 4 orientations of the 7 tetromino types are pre-calculated. Rotating a block is a trivial compile-time index addition.
+* **O(1) Transformations:** Rotations for all 4 orientations of the 7 tetromino types are pre-calculated. Rotating a block is a trivial runtime-time index addition.
 * **Cache-Friendly Board:** The 2D matrix of the playing field is flattened into a highly efficient 1D array, keeping the entire game board local within the CPU cache.
 * **Static Elements:** High-score calculations, level speeds, title headers, and even complex screens like the GAME OVER template and the "Next Block" preview box are served via raw, flat data structures.
 
@@ -41,7 +41,7 @@ Loops are designed to bail out at the absolute earliest opportunity ($O(1)$ opti
 
 ### ⚙️ Core Mechanics
 * **7-Bag Randomizer:** Perfectly replicates official Tetris guidelines. Block generation shuffles a sequence of 7 unique pieces, guaranteeing a fair distribution. Grabbing the next piece is a pure O(1) operation.
-* **Hard-Capped Smart Level Progression:** Every 10 cleared lines increases the level. Game speed accelerates dynamically based on a rigid hardware delay array. Once the absolute maximum speed is hit (50 ms ticks), level increments stop, capping the game at peak difficulty.
+* **Hard-Capped Smart Level Progression:** Every 10 cleared lines increases the level. Game speed accelerates dynamically based on a rigid hardware delay array. Once the absolute maximum speed is hit (100 ms ticks), level increments stop, capping the game at peak difficulty.
 * **Official Score Table:** Scores scale exponentially based on single, double, triple, or Tetris clears via an exact score LUT.
 
 ---

@@ -12,7 +12,7 @@
 
 
 /**
- * @brief Implements a version of the well-known arcade classic "Tetris" that closely resembles the original visually.
+ * @brief Implements a version of the well-known arcade classic "Tetris" that closely resembles the original visually and in gameplay.
  * This program has been implemented to be as efficient and high-performance as possible (in terms of memory and algorithms)
  * to ensure a smooth and enjoyable gaming experience on the console.
  *
@@ -32,12 +32,12 @@ private:
 	// ================================================================================================================================================
 
 	/**
-	* @brief An enum class for the type and direction of movement.
+	* @brief An enum for the type and direction of movement.
 	*/
 	enum Movement : uint8_t { ROTATION, DOWN, LEFT, RIGHT };
 
 	/**
-	* @brief An enum class for the states of the completion routine's "Finite-State Machine" (FSM).
+	* @brief An enum for the states of the completion routine's "Finite-State Machine" (FSM).
 	*/
 	enum State : uint8_t { IDLE, BOOM_1, BOOM_2, DROP };
 
@@ -197,13 +197,13 @@ private:
 	};
 
 	/**
-	 * @brief Data structure for data collection during any collision detection
-	 * @note saves re-calculating the target indices of the current currBlock
+	 * @brief Data structure for data collection during any collision detection.
+	 * @note saves the re-calculation of the resulting board indices of the `currBlock` when the movement is applied
 	 */
 	struct MoveInfo
 	{
-		uint16_t idx[4] = {};
-		bool canMove = false;
+		uint16_t idx[4] = {};								// is populated with the board indices of the `currBlock` (during each check)
+		bool canMove = false;								// `true` if the user-specified movement can be applied to the `currBlock`.
 	};
 
 	// ================================================================================================================================================
@@ -244,14 +244,15 @@ private:
 	bool PREV_ROT = false;						// key control: previous Value of rotation Key
 	bool PREV_DOWN = true;						// key control: Previous value of down key
 
+	void initNewGame();
 	void setBoard();
 	void shuffleBag();
 	void startLoop();
+
 	void processInput();
 	void updateGame();
 	void drawBoard();
 
-	void initNewGame();
 	void setMoveInfo(Movement dir);
 	void move(Movement dir);
 	void rotate();

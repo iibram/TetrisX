@@ -56,7 +56,7 @@ void TetrisX::initNewGame()
 }
 
 /**
- * @brief Initializes the entire game board, including the edges.
+ * @brief Initializes the entire game board, including the borders.
  */
 void TetrisX::setBoard()
 {
@@ -67,7 +67,7 @@ void TetrisX::setBoard()
 		board[i].solid = false;
 	}
 
-	for (uint16_t i = 0, j = 13; i < Configs::LAST; i += Configs::COLS, j += Configs::COLS)		// process the vertical edges
+	for (uint16_t i = 0, j = 13; i < Configs::LAST; i += Configs::COLS, j += Configs::COLS)		// process the vertical borders
 	{
 		board[i].id = 10; board[i].solid = true;
 		board[j].id = 10; board[j].solid = true;
@@ -207,7 +207,7 @@ void TetrisX::updateGame()
 
 	if (complFSM == State::IDLE)
 	{
-		// if applicable: spawn a new block
+		// if applicable: spawn a new block and point to the next nextBlock
 		if (newBlock)
 		{
 			currID = nextID;
@@ -364,7 +364,7 @@ void TetrisX::setMoveInfo(Movement dir)
 		else if (dir == Movement::LEFT) offIdx = -1;
 		else if (dir == Movement::RIGHT) offIdx = 1;
 
-		for (B_Cell& b : currBlock)													// same technique as above (just the offset can set before once)
+		for (B_Cell& b : currBlock)													// same technique as above (just the offsets can set before once)
 		{
 			moveInfo.idx[++i] = b.idx + offIdx;
 			if (board[moveInfo.idx[i]].solid)
@@ -373,7 +373,7 @@ void TetrisX::setMoveInfo(Movement dir)
 	}
 
 	moveInfo.canMove = true;														// when arrived here, the currBlock can move
-	actionPerformed = true;															// an action rquiring an update of the "canvas" is happened
+	actionPerformed = true;															// an action - requiring an update of the "canvas" - is happened
 }
 
 /**
@@ -508,7 +508,7 @@ void TetrisX::completion_1(uint8_t bottomRow)
 					board[line[i]].id = 8;											// mark the block cells of the entire row with code 8 = 💥
 				}
 				newBlock = false;													// the next newBlock phase begins only after full completion.
-				actionPerformed = true;
+				actionPerformed = true;												// an action requiring a visual update is performed
 				complFSM = State::BOOM_2;											// next stage of the completion routine
 			}
 			cnt = 0; isContinous = true;											// reset the control elements
@@ -541,33 +541,34 @@ void TetrisX::completion_3()
 	uint8_t rows = complVec.size() / (Configs::COLS - 2);							// number of rows to delete, excluding the L/R margins
 	uint16_t minIdx = rows * Configs::COLS;											// offset now adjusted to a full row of the board (including margins)
 
-	score += Configs::SCORE_TABLE[rows - 1];
-	lines += rows;
+	score += Configs::SCORE_TABLE[rows - 1];										// updating the score
+	lines += rows;																	// updating the completed lines
 
-	if (level < Configs::SPEEDS.size() - 1)											// when game speed is NOT at max
+	if (level < Configs::SPEEDS.size() - 1)											// only when game speed is NOT at max
 	{
 		line_cnt += rows;
-		if (line_cnt > 9)
+		if (line_cnt > 9)															// at at least 10th completed line => level += 1
 		{
 			++level;
-			line_cnt -= 10;
+			line_cnt -= 10;															// any extra complete lines are retained
 		}
 	}
 
+	// The algorithm: final stage of the completion routine
 	uint8_t cnt = 0, solids = 0, off = Configs::COLS;
-	bool first = true;
+	bool checkOffset = true;
 
-	for (uint16_t i = complVec[0]; i > minIdx; --i)									// complVec[0]: lowest & last cell to be deleted
+	for (uint16_t i = complVec[0]; i > minIdx; --i)									// i = complVec[0]: lowest & last cell to be deleted
 	{
-		if (first)
+		if (checkOffset)
 		{
 			while (board[i - off].id == 9)
-				off += Configs::COLS;												// skip completed lines
+				off += Configs::COLS;												// skip completed lines (detect the number of rows to offset)
 
-			first = false;
+			checkOffset = false;
 		}
 
-		uint16_t offIdx = i - off;
+		uint16_t offIdx = i - off;													// pointing to first uncompleted lines rightmost cell
 
 		board[i] = board[offIdx];													// shift the cell down by "off" rows
 		board[i].idx = i;															// update Cell.idx to the new location
@@ -580,7 +581,7 @@ void TetrisX::completion_3()
 			if (rows > 0) --rows;													// only after all lines to be deleted have been processed
 			else if (solids == 0) break;											// check if a line without blocks was encountered => break
 
-			first = true;															// check the offset again
+			checkOffset = true;														// set -> the offset must be checked again
 			solids = 0; cnt = 0;													// reset counter after every full line
 			i -= 2; 																// skip margins
 		}
