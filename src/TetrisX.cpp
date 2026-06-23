@@ -6,22 +6,53 @@
 // ============================================================================================================================================================
 
 /**
- * @brief Custom Constructor: Reserves the containers and the `std::stringstream` with the expected sizes.
- * Initializes the game board and starts the main loop.
+ * @brief Custom Constructor: Initiates the 7-bag-system, reserves space for the `std::stringstream` with the expected size,
+ * initializes a new game and starts the main loop.
  */
 TetrisX::TetrisX() : bag({ 1, 2, 3, 4, 5, 6, 7 })
 {
+	AsyncKey::initTerminal();														// OS specific terminal setup
+	std::cout << Configs::CLEAR_DISPL << Configs::HIDE_CURSOR;						// clear all characters from the console and hide the cursor
+
 	// reserve sufficient memory for the std::stringstream
 	// (Emojis require 4 bytes in UTF-8 + any line breaks)
-	uint16_t assumedSize = (Configs::SIZE + 5) * 4 + Configs::ROWS;								// + 5 lines due to the HUD
+	uint16_t assumedSize = (Configs::ROWS + 5) * 5;									// ((Configs::ROWS + 5) << 2) + (Configs::ROWS + 5) ==> x * 5
 	ss.rdbuf()->str().reserve(assumedSize);
 
-	complVec.reserve(4 * Configs::COLS);
-	board.reserve(Configs::SIZE);
+	complVec.reserve((Configs::COLS << 2));
 
+	initNewGame();
+	startLoop();
+}
+
+/**
+ * @brief Custom destructor: Shows the cursor on the console again and restores the OS specific terminal configurations.
+ */
+TetrisX::~TetrisX()
+{
+	std::cout << Configs::SHOW_CURSOR;												// show the cursor again (user has quit the game)
+	AsyncKey::restoreTerminal();													// OS specific terminal restoration
+}
+
+/**
+ * @brief Sets/Resets all data for a new game session
+ */
+void TetrisX::initNewGame()
+{
 	setBoard();
 	shuffleBag();
-	startLoop();
+
+	nextID = bag[nIDX];																// implicitly results in: currID = bag[0] at the start of the game
+	actionPerformed = true;															// implies an initial call to drawBoard()
+	hitGround = false;																// currBlock hasn't hit the ground yet
+	isBlocked = false;																// currBlock isn't blocked yet
+	gameOver = false;																// reset game over flag
+	newBlock = true;																// immediately spwaning the first block
+
+	// HUD reset
+	score = 0;
+	lines = 0;
+	level = 0;
 }
 
 /**
@@ -30,12 +61,16 @@ TetrisX::TetrisX() : bag({ 1, 2, 3, 4, 5, 6, 7 })
 void TetrisX::setBoard()
 {
 	for (uint16_t i = 0; i < Configs::SIZE; i++)												// initialize the entire board
-		board.push_back({ i, 0 });
+	{
+		board[i].idx = i;
+		board[i].id = 0;
+		board[i].solid = false;
+	}
 
 	for (uint16_t i = 0, j = 13; i < Configs::LAST; i += Configs::COLS, j += Configs::COLS)		// process the vertical edges
 	{
-		board[i] = { i, 10, true };
-		board[j] = { j, 10, true };
+		board[i].id = 10; board[i].solid = true;
+		board[j].id = 10; board[j].solid = true;
 	}
 
 	for (uint16_t i = Configs::LAST; i < Configs::SIZE; i++)									// process the bottom row
@@ -74,16 +109,13 @@ void TetrisX::shuffleBag()
  */
 void TetrisX::startLoop()
 {
-	std::cout << std::flush << Configs::CLEAR_DISPL << Configs::HIDE_CURSOR;		// flush and clear all characters from the console and hide the cursor
+	std::cout << std::flush;														// flush the console for immediate response
 
 	const double FRAME_LEN = 0.02; 													// fixed update rate (1000 ms / 20 ms => 50 FPS)
-	double accu = 0.0;																// accumulator for summation
+	double accu = 0.0;																// accumulator for summation of the elapsed time
 	auto lastTime = std::chrono::high_resolution_clock::now();						// save current time
 
-	nextID = bag[nIDX];																// implicitly results in: currID = bag[0] at the start of the game
-	actionPerformed = true;															// implies an initial call to drawBoard()
-
-	while (isRunning)																// the MAIN LOOP
+	while (isRunning)																// the MAIN LOOP starts
 	{
 		auto currTime = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double> elapsedTime = currTime - lastTime;
@@ -91,20 +123,22 @@ void TetrisX::startLoop()
 
 		accu += elapsedTime.count();
 
-		while (accu >= FRAME_LEN)													// check per FRAME (every 20 ms).
+		while (accu >= FRAME_LEN)													// check per FRAME (every 20 ms)
 		{
 			accu -= FRAME_LEN;
 
 			processInput();
-			updateGame();
-			drawBoard();
 
-			++autoDown;
-			++complFrame;
+			if (!gameOver)
+			{
+				updateGame();
+				drawBoard();
+
+				++autoDown;
+				++complFrame;
+			}
 		}
 	}
-
-	std::cout << Configs::SHOW_CURSOR;												// show the cursor again (game over)
 }
 
 // ============================================================================================================================================================
@@ -116,33 +150,40 @@ void TetrisX::startLoop()
  */
 void TetrisX::processInput()
 {
-	if (currID)
+	if (AsyncKey::isPressed(AsyncKey::Key::ESC)) isRunning = false;
+
+	if (!gameOver)
 	{
-		bool ROT = AsyncKey::isPressed(AsyncKey::Key::UP);
-		bool LEFT = AsyncKey::isPressed(AsyncKey::Key::LEFT);
-		bool RIGHT = AsyncKey::isPressed(AsyncKey::Key::RIGHT);
+		if (currID)
+		{
+			bool ROT = AsyncKey::isPressed(AsyncKey::Key::UP);
+			bool LEFT = AsyncKey::isPressed(AsyncKey::Key::LEFT);
+			bool RIGHT = AsyncKey::isPressed(AsyncKey::Key::RIGHT);
 
-		isRunning = !(AsyncKey::isPressed(AsyncKey::Key::ESC));
-		DOWN = AsyncKey::isPressed(AsyncKey::Key::DOWN);
-		if (LEFT && !PREV_L)  move(Movement::LEFT);
-		if (RIGHT && !PREV_R) move(Movement::RIGHT);
-		if (currID != 6 && (ROT && !PREV_ROT)) rotate();						// Square (ID = 6) is not rotated! (saving resources)
+			CURR_DOWN = AsyncKey::isPressed(AsyncKey::Key::DOWN);
+			if (AsyncKey::isPressed(AsyncKey::Key::ESC)) isRunning = false;
+			if (LEFT && !PREV_L)  move(Movement::LEFT);
+			if (RIGHT && !PREV_R) move(Movement::RIGHT);
+			if (currID != 6 && (ROT && !PREV_ROT)) rotate();						// Square (ID = 6) is not rotated! (saving resources)
 
-		PREV_L = LEFT;
-		PREV_R = RIGHT;
-		PREV_ROT = ROT;
+			PREV_L = LEFT;
+			PREV_R = RIGHT;
+			PREV_ROT = ROT;
+		}
 	}
+	else if (AsyncKey::isPressed(AsyncKey::Key::ENTER))
+		initNewGame();
 }
-// ============================================================================================================================================================
+
 /**
- * @brief Controlling the game logic
+ * @brief Updates the game board (the game logic)
  */
 void TetrisX::updateGame()
 {
 	// if applicable: traverse the completion routine's FSM
 	if (complFSM != State::IDLE)
 	{
-		if (complFSM == State::BOOM_1)											// starts with complFrame = 0, but sets it for the subsequent stages
+		if (complFSM == State::BOOM_1)												// ignores complFrame, but resets it for the subsequent stages
 		{
 			completion_1(bottomRow);
 			complFrame = 0;
@@ -160,42 +201,12 @@ void TetrisX::updateGame()
 			completion_3();
 			complFSM = State::IDLE;
 			actionPerformed = true;
-			newBlock = true;													// completion routine finished, newBlock phase begins
+			newBlock = true;														// completion routine finished, newBlock phase begins
 		}
 	}
 
-	//else
 	if (complFSM == State::IDLE)
 	{
-		// current block has hit a solid part or the DOWN key was just released
-		// Allows continuous holding of the DOWN key without waiting for the autoDown counter to expire;
-		// upon hitting the ground, releasing the DOWN key becomes mandatory (decoupling the DOWN key).
-		if (hitGround || (PREV_DOWN && !DOWN))
-		{
-			PREV_DOWN = DOWN;
-			if (hitGround)
-			{
-				hitGround = false;
-				autoDown = 0;
-			}
-		}
-
-		// If a block is in transit
-		if (currID)
-		{
-			// drop currBlock by one row (on continuous DOWN | AUTO DOWN reached)
-			if (DOWN && !PREV_DOWN || autoDown == Configs::SPEEDS[level])
-			{
-				move(Movement::DOWN);
-				trySolidize();
-
-				isRunning = !isBlocked;											// game over ?
-
-				if (autoDown == Configs::SPEEDS[level])
-					autoDown = 0;
-			}
-		}
-
 		// if applicable: spawn a new block
 		if (newBlock)
 		{
@@ -210,12 +221,42 @@ void TetrisX::updateGame()
 
 			currBlock = Configs::BLOCKS[currID - 1];
 
+			isBlocked = false;														// isBlocked will be set in the loop accordingly
 			for (B_Cell& b : currBlock)
+			{
+				isBlocked |= board[b.idx].solid;									// is the specific spawn area of the currBlock already blocked?
 				board[b.idx] = { b.idx, currID };
+			}																		// if so ==> isBlocked = true
 
 			autoDown = 0;
 			actionPerformed = true;
 			newBlock = false;
+		}
+
+		else
+		{
+			// current block has hit a solid part or the DOWN key was just released
+			// Allows continuous holding the DOWN key without waiting for the autoDown counter to expire;
+			// upon hitting the ground, releasing the DOWN key becomes mandatory (decoupling the DOWN key).
+			if (hitGround || (PREV_DOWN && !CURR_DOWN))
+			{
+				PREV_DOWN = CURR_DOWN;
+				if (hitGround)
+				{
+					hitGround = false;
+					autoDown = 0;
+				}
+			}
+
+			// drop currBlock by one row (on continuous DOWN | AUTO DOWN reached)
+			if (CURR_DOWN && !PREV_DOWN || autoDown == Configs::SPEEDS[level])
+			{
+				move(Movement::DOWN);
+				trySolidize();
+
+				if (autoDown == Configs::SPEEDS[level])
+					autoDown = 0;
+			}
 		}
 	}
 }
@@ -240,15 +281,45 @@ void TetrisX::drawBoard()
 		ss << Configs::TITLE[2] << std::format("{:0>3}    \U00002503", lines) << nextBlock[2];
 		ss << Configs::TITLE[3];
 
-		// ss << current game board
-		for (uint8_t r = 0; r < Configs::ROWS; ++r)
+		// Just in terms of efficiency and performance, we resort to code duplication here (we don't want to disrupt every draw loop) !!!
+		if (!isBlocked)
 		{
-			uint16_t base = r * Configs::COLS;
+			// ss << current game board
+			for (uint8_t r = 0; r < Configs::ROWS; ++r)
+			{
+				uint16_t base = r * Configs::COLS;
 
-			for (uint8_t c = 0; c < Configs::COLS; ++c)
-				ss << Configs::VISUALS[board[base + c].id];
+				for (uint8_t c = 0; c < Configs::COLS; ++c)
+					ss << Configs::VISUALS[board[base + c].id];
 
-			ss << '\n';
+				ss << '\n';
+			}
+		}
+
+		else // isBlocked = GAME OVER screen (same code as above, but called once in a game session)
+		{
+			for (uint8_t r = 0; r < Configs::ROWS; ++r)
+			{
+				uint16_t base = r * Configs::COLS;
+
+				switch (r)
+				{
+					case  6: ss << Configs::GAM_OVER[0]; break;
+					case  7: ss << Configs::GAM_OVER[1]; break;
+					case  8: ss << Configs::GAM_OVER[2]; break;
+					case  9: ss << Configs::GAM_OVER[3]; break;
+					case 10: ss << Configs::GAM_OVER[4]; break;
+					case 11: ss << Configs::GAM_OVER[5]; break;
+
+					default:
+						for (uint8_t c = 0; c < Configs::COLS; ++c)
+							ss << Configs::VISUALS[board[base + c].id];
+						break;
+				}
+				ss << '\n';
+			}
+
+			gameOver = true;
 		}
 
 		// immediately output the current game board frame to the console and reset the string stream
@@ -260,21 +331,17 @@ void TetrisX::drawBoard()
 }
 
 // ============================================================================================================================================================
-// 																	   F u n c t i o n s
+// 																		M o v e m e n t
 // ============================================================================================================================================================
 
-// ------------------------------------------------------------------------------------------------------------------------------------------------------------
-//																		M o v e m e n t
-// ------------------------------------------------------------------------------------------------------------------------------------------------------------
-
 /**
- * @brief Captures information regarding the specified movement type and direction, stores the resulting grid indices, and provides feedback
- * on the feasibility of the intended movement direction. The function terminates early if a collision is detected.
+ * @brief Captures information regarding the specified movement type and direction, stores the resulting grid indices, and provides feedback on the
+ * feasibility of the intended movement direction. The function terminates early if a collision is detected.
  * @param dir enum class Movement { ROTATION, DOWN, LEFT, RIGHT }
  */
 void TetrisX::setMoveInfo(Movement dir)
 {
-	moveInfo.canMove = false;
+	moveInfo.canMove = false;														// assumption: currBlock can't move
 	short offIdx;
 	short i = -1;
 
@@ -282,11 +349,11 @@ void TetrisX::setMoveInfo(Movement dir)
 	{
 		for (B_Cell& b : currBlock)
 		{
-			// a rotation for the square (ID = 6) never actually arrives here! Listed as ROT_4X4 solely for the sake of correctness
+			// a rotation for the square (ID = 6) never actually arrives here! Listed also as ROT_4X4 solely for the sake of correctness
 			offIdx = (currID < 6 ? Configs::ROT_3X3[b.lvl][b.off] : Configs::ROT_4X4[b.lvl][b.off]);
 
-			moveInfo.idx[++i] = b.idx + offIdx;
-			if (board[moveInfo.idx[i]].solid)
+			moveInfo.idx[++i] = b.idx + offIdx;										// collecting the target cell indices for the actual move
+			if (board[moveInfo.idx[i]].solid)										// the check: is the targeted cell free?
 				return;
 		}
 	}
@@ -297,7 +364,7 @@ void TetrisX::setMoveInfo(Movement dir)
 		else if (dir == Movement::LEFT) offIdx = -1;
 		else if (dir == Movement::RIGHT) offIdx = 1;
 
-		for (B_Cell& b : currBlock)
+		for (B_Cell& b : currBlock)													// same technique as above (just the offset can set before once)
 		{
 			moveInfo.idx[++i] = b.idx + offIdx;
 			if (board[moveInfo.idx[i]].solid)
@@ -305,24 +372,28 @@ void TetrisX::setMoveInfo(Movement dir)
 		}
 	}
 
-	moveInfo.canMove = true;
-	actionPerformed = true;
+	moveInfo.canMove = true;														// when arrived here, the currBlock can move
+	actionPerformed = true;															// an action rquiring an update of the "canvas" is happened
 }
 
 /**
- * @brief Executes the passed movement for the current block (currBlock), if applicable
+ * @brief Executes the passed movement for the `currBlock`, if applicable.
+ *
+ * Invokes `setMoveInfo(Movement)` to check and pre-collect the resulting cells to occupy. If the target movement is applicable, this function performs
+ * the movement by updating the board and the currBlock data according to the pre-collected data and the target direction. Also, according the direction
+ * of the movement, two different approaches are required during the loop so that the current blocks data isn't overriden faulty.
  * @param dir direction of movement -> enum class Movement { DOWN, LEFT, RIGHT } \ {ROTATION}
  */
 void TetrisX::move(Movement dir)
 {
-	setMoveInfo(dir);
+	setMoveInfo(dir);																// check and get the data for the user defined movement
 
-	if (moveInfo.canMove)
+	if (moveInfo.canMove)															// if the move is possible, the pre collected indices will be occupied
 	{
 		short i = -1;
 		if (dir == Movement::LEFT)
 		{
-			for (B_Cell& b : currBlock)
+			for (B_Cell& b : currBlock)												// iterates in ascending order of b.idx (B_cell is sorted that way)
 			{
 				board[b.idx].id = 0;
 				b.idx = moveInfo.idx[++i];
@@ -333,7 +404,7 @@ void TetrisX::move(Movement dir)
 		else
 		{	// DOWN | RIGHT		(Difference: iteration in reverse direction)
 			short i = 4;
-			for (B_Cell& b : currBlock | std::views::reverse)
+			for (B_Cell& b : currBlock | std::views::reverse)						 // iterates in descendig order of the indices
 			{
 				board[b.idx].id = 0;
 				b.idx = moveInfo.idx[--i];
@@ -344,7 +415,9 @@ void TetrisX::move(Movement dir)
 }
 
 /**
- * @brief Performs a right rotation of the current block.
+ * @brief Rotates the current block clockwise. Like `move(Movement)`, this function calls `setMoveInfo(Movement)` and occupies the designated cells,
+ * provided the movement is possible. The loop strictly requires the B-cell indices to be in ascending order; therefore, the order must be sorted into
+ * ascending sequence again after each rotation to ensure future movements work correctly.
  */
 void TetrisX::rotate()
 {
@@ -357,15 +430,14 @@ void TetrisX::rotate()
 		{
 			board[b.idx].id = 0;
 			b.idx = moveInfo.idx[++i];
-			b.off = b.off < 3 ? (b.off + 1) : 0;
+			b.off = b.off < 3 ? (b.off + 1) : 0;									// bypassing a high cost modulo operation
 		}
 	}
-	// now process the rotated blocks onto the board
-	for (B_Cell& b : currBlock)
+
+	for (B_Cell& b : currBlock)														// process the rotated blocks onto the board
 		board[b.idx] = { b.idx, currID };
 
-	// sort the B_Cells in ascending order by board index
-	std::ranges::sort(currBlock, {}, &B_Cell::idx);
+	std::ranges::sort(currBlock, {}, &B_Cell::idx);									// sort the B_Cells in ascending order by board index
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -381,13 +453,11 @@ void TetrisX::trySolidize()
 {
 	if (!moveInfo.canMove)
 	{
-		isBlocked = true;
 		uint16_t bottomIdx = 1;														// to avoid division by zero (even though it is guaranteed to be populated)
 		uint8_t k = 0;																// index for the comparison with BLOCKS
 
 		for (B_Cell& b : currBlock)
 		{
-			isBlocked &= (b.idx == Configs::BLOCKS[currID - 1][k++].idx);			// comparing if currBlock hit a SOLID without a single move since spawn
 			board[b.idx].solid = true;												// currBlock is registered as SOLID in the board
 			bottomIdx = b.idx;														// since currBlock is sorted in ascending order => last B_cell.idx = max
 		}
@@ -442,7 +512,8 @@ void TetrisX::completion_1(uint8_t bottomRow)
 				complFSM = State::BOOM_2;											// next stage of the completion routine
 			}
 			cnt = 0; isContinous = true;											// reset the control elements
-			endIdx -= 2;															// skip the left margin
+			if (endIdx > 1)
+				endIdx -= 2;														// skip the left margin
 		}
 	}
 }
@@ -472,11 +543,15 @@ void TetrisX::completion_3()
 
 	score += Configs::SCORE_TABLE[rows - 1];
 	lines += rows;
-	line_cnt += rows;
-	if (line_cnt > 9)
+
+	if (level < Configs::SPEEDS.size() - 1)											// when game speed is NOT at max
 	{
-		++level;
-		line_cnt -= 10;
+		line_cnt += rows;
+		if (line_cnt > 9)
+		{
+			++level;
+			line_cnt -= 10;
+		}
 	}
 
 	uint8_t cnt = 0, solids = 0, off = Configs::COLS;
