@@ -109,8 +109,8 @@ private:
 			┃ LINES: 000    ┃        ┃
 			┣━━━━━━━━━━━━━━━┻━━━━━━━━┫	\U00002523: ┣	\U0000252B: ┫
 		*/
-		// Title bar as a string_view array. Access: TITLE [ i ]
-		constexpr static std::string_view TITLE[4] =
+		// HUD as a string_view array. Access: HUD [ i ]
+		constexpr static std::string_view HUD[4] =
 		{
 			"\U0000250F\U00002501\U00002501\U00002501\U00002501\U00002501\U00002501"	// Index 0: "┏━━━━━━━━━━━━━━━┳━━━━━━━━┓\n┃ SCORE: "
 			"\U00002501\U00002501\U00002501\U00002501\U00002501\U00002501\U00002501"
@@ -231,12 +231,12 @@ private:
 	uint8_t complFrame = 0;						// counts the duration of a completion phase
 	uint8_t line_cnt = 0;						// counter for completing 10 lines (level increase every 10 lines)
 
-	bool isRunning = true;						// game status
-	bool newBlock = true;						// control note: new block spawns
-	bool hitGround = false;						// control note: currBlock has hit a SOLID field vertically
-	bool actionPerformed = false;				// control note: an action was performed that requires an update of the game board
-	bool isBlocked = false;						// control note: the currBlock is immediately blocked upon appearance
-	bool gameOver = false;
+	bool isRunning = true;						// flag: app state (overall app lifetime)
+	bool newBlock = true;						// flag: new block spawns
+	bool hitGround = false;						// flag: currBlock has hit a SOLID field vertically
+	bool actionPerformed = false;				// flag: an action was performed that requires an update of the game board
+	bool isBlocked = false;						// flag: the currBlock is immediately blocked upon appearance
+	bool gameOver = false;						// flag: current game session has ended
 
 	bool CURR_DOWN = false;						// key control: current value of down key
 	bool PREV_L = false;						// key control: previous value of left key

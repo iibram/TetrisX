@@ -111,17 +111,20 @@ void TetrisX::startLoop()
 {
 	std::cout << std::flush;														// flush the console for immediate response
 
-	const double FRAME_LEN = 0.02; 													// fixed update rate (1000 ms / 20 ms => 50 FPS)
-	double accu = 0.0;																// accumulator for summation of the elapsed time
-	auto lastTime = std::chrono::high_resolution_clock::now();						// save current time
+	const std::chrono::microseconds FRAME_LEN(20000);								// fixed update rate (1000 ms / 20 ms => 50 FPS)
+	std::chrono::microseconds accu(0);												// accumulator for summation of the elapsed time
+	auto lastTime = std::chrono::steady_clock::now();								// save current time
+
 
 	while (isRunning)																// the MAIN LOOP starts
 	{
-		auto currTime = std::chrono::high_resolution_clock::now();
-		std::chrono::duration<double> elapsedTime = currTime - lastTime;
-		lastTime = currTime;
+		auto currTime = std::chrono::steady_clock::now();
+		auto elapsedTime = std::chrono::duration_cast<std::chrono::microseconds>(currTime - lastTime);
 
-		accu += elapsedTime.count();
+		if (elapsedTime.count() == 0) continue;										// GUARD: bypass the rest, when no time diff. is registered
+
+		lastTime = currTime;
+		accu += elapsedTime;
 
 		while (accu >= FRAME_LEN)													// check per FRAME (every 20 ms)
 		{
@@ -152,7 +155,7 @@ void TetrisX::processInput()
 {
 	if (AsyncKey::isPressed(AsyncKey::Key::ESC)) isRunning = false;
 
-	if (!gameOver)
+	else if (!gameOver)
 	{
 		if (currID)
 		{
@@ -161,7 +164,6 @@ void TetrisX::processInput()
 			bool RIGHT = AsyncKey::isPressed(AsyncKey::Key::RIGHT);
 
 			CURR_DOWN = AsyncKey::isPressed(AsyncKey::Key::DOWN);
-			if (AsyncKey::isPressed(AsyncKey::Key::ESC)) isRunning = false;
 			if (LEFT && !PREV_L)  move(Movement::LEFT);
 			if (RIGHT && !PREV_R) move(Movement::RIGHT);
 			if (currID != 6 && (ROT && !PREV_ROT)) rotate();						// Square (ID = 6) is not rotated! (saving resources)
@@ -171,8 +173,8 @@ void TetrisX::processInput()
 			PREV_ROT = ROT;
 		}
 	}
-	else if (AsyncKey::isPressed(AsyncKey::Key::ENTER))
-		initNewGame();
+
+	else if (AsyncKey::isPressed(AsyncKey::Key::ENTER)) initNewGame();
 }
 
 /**
@@ -276,10 +278,10 @@ void TetrisX::drawBoard()
 		FlatBlock nextBlock = Configs::FLAT_BLOCKS[nextID - 1];
 
 		// ss << title bar (incl. updates)
-		ss << Configs::TITLE[0] << std::format("{:0>6} \U00002503", score) << nextBlock[0];
-		ss << Configs::TITLE[1] << std::format("{:0>3}    \U00002503", level) << nextBlock[1];
-		ss << Configs::TITLE[2] << std::format("{:0>3}    \U00002503", lines) << nextBlock[2];
-		ss << Configs::TITLE[3];
+		ss << Configs::HUD[0] << std::format("{:0>6} \U00002503", score) << nextBlock[0];
+		ss << Configs::HUD[1] << std::format("{:0>3}    \U00002503", level) << nextBlock[1];
+		ss << Configs::HUD[2] << std::format("{:0>3}    \U00002503", lines) << nextBlock[2];
+		ss << Configs::HUD[3];
 
 		// Just in terms of efficiency and performance, we resort to code duplication here (we don't want to disrupt every draw loop) !!!
 		if (!isBlocked)
