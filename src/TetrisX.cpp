@@ -6,8 +6,8 @@
 // ============================================================================================================================================================
 
 /**
- * @brief Custom Constructor: Initiates the 7-bag-system, reserves space for the `std::stringstream` with the expected size,
- * initializes a new game and starts the main loop.
+ * @brief Custom Constructor: Initializes the 7-bag-system and OS specific terminal configurations (via AsyncKey), reserves space for the `std::stringstream`
+ * and for `complVec` with expected sizes, initiates a new game and starts the main loop.
  */
 TetrisX::TetrisX() : bag({ 1, 2, 3, 4, 5, 6, 7 })
 {
@@ -16,7 +16,7 @@ TetrisX::TetrisX() : bag({ 1, 2, 3, 4, 5, 6, 7 })
 
 	// reserve sufficient memory for the std::stringstream
 	// (Emojis require 4 bytes in UTF-8 + any line breaks)
-	uint16_t assumedSize = (Configs::ROWS + 5) * 5;									// ((Configs::ROWS + 5) << 2) + (Configs::ROWS + 5) ==> x * 5
+	uint16_t assumedSize = (Configs::ROWS + 5) * 5;									// ((Configs::ROWS + 5) << 2) + (Configs::ROWS + 5) ==> (Configs::ROWS + 5) * 5
 	ss.rdbuf()->str().reserve(assumedSize);
 
 	complVec.reserve((Configs::COLS << 2));
@@ -116,7 +116,7 @@ void TetrisX::startLoop()
 	auto lastTime = std::chrono::steady_clock::now();								// save current time
 
 
-	while (isRunning)																// the MAIN LOOP starts
+	while (isRunning)																// the MAIN LOOP starts (vasts the applications whole lifetime)
 	{
 		auto currTime = std::chrono::steady_clock::now();
 		auto elapsedTime = std::chrono::duration_cast<std::chrono::microseconds>(currTime - lastTime);
@@ -126,7 +126,7 @@ void TetrisX::startLoop()
 		lastTime = currTime;
 		accu += elapsedTime;
 
-		while (accu >= FRAME_LEN)													// check per FRAME (every 20 ms)
+		while (accu >= FRAME_LEN)													// enter at each target FRAME (every 20 ms => 50 FPS)
 		{
 			accu -= FRAME_LEN;
 
@@ -207,7 +207,7 @@ void TetrisX::updateGame()
 		}
 	}
 
-	if (complFSM == State::IDLE)
+	if (complFSM == State::IDLE)													// also enabling entrance right after an acomplished completion routine
 	{
 		// if applicable: spawn a new block and point to the next nextBlock
 		if (newBlock)
@@ -237,7 +237,7 @@ void TetrisX::updateGame()
 
 		else
 		{
-			// current block has hit a solid part or the DOWN key was just released
+			// current block has hit a solid part or the DOWN key was just released.
 			// Allows continuous holding the DOWN key without waiting for the autoDown counter to expire;
 			// upon hitting the ground, releasing the DOWN key becomes mandatory (decoupling the DOWN key).
 			if (hitGround || (PREV_DOWN && !CURR_DOWN))
@@ -434,12 +434,12 @@ void TetrisX::rotate()
 			b.idx = moveInfo.idx[++i];
 			b.off = b.off < 3 ? (b.off + 1) : 0;									// bypassing a high cost modulo operation
 		}
+
+		for (B_Cell& b : currBlock)													// process the rotated blocks onto the board
+			board[b.idx] = { b.idx, currID };
+
+		std::ranges::sort(currBlock, {}, &B_Cell::idx);								// sort the B_Cells in ascending order by board index
 	}
-
-	for (B_Cell& b : currBlock)														// process the rotated blocks onto the board
-		board[b.idx] = { b.idx, currID };
-
-	std::ranges::sort(currBlock, {}, &B_Cell::idx);									// sort the B_Cells in ascending order by board index
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
